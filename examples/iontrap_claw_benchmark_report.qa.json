@@ -1,0 +1,29 @@
+{
+  "passed": true,
+  "html_sha256": "72b5e88b430436d4072b9c99043cc357abfee6e2e78b69eefefce5c328839276",
+  "duplicate_ids": [],
+  "nonembedded_runtime_resources": [],
+  "static_data_tables": 9,
+  "errors": [],
+  "input_sha256": "cb87574dfb2d9bff6403ce2d53dc7c121be16b73e2f86399b7add9c900c271eb",
+  "math_expressions": 0,
+  "embedded_fonts": [],
+  "browser_tested": true,
+  "interaction_tested": true,
+  "scope": "Static structure, offline resources and embedded data only; perform interaction/visual QA separately.",
+  "interaction_record": {
+    "browser": "headless Chrome (CDP, Input.dispatchMouseEvent 真实指针管线)",
+    "checks": {
+      "hover_tooltip": "悬停显示浮层，含数值与单位",
+      "click_detail": "点击固定详情到该图自己的面板",
+      "keyboard_enter": "键盘聚焦 + Enter 选择",
+      "escape_hides": "Escape 关闭浮层",
+      "dot_click_detail": "点图点击显示完整来源与条件",
+      "detail_scoping": "一张图的选择不影响其他图的详情面板",
+      "all_charts_drawn": "4 张图全部渲染出数据点",
+      "narrow_no_overflow": "360px 窄屏无横向溢出",
+      "narrow_charts_ok": "窄屏下图表正常渲染"
+    },
+    "notes": "密集折线近邻点按最近点选择（组件设计行为）；静态 validate_report 通过；QA 绑定 html sha256。"
+  }
+}

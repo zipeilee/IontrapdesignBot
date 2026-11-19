@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IonTrapClaw Benchmark：复现 Quantinuum 三代架构 H1 / H2 / Helios</title>
+<style>
+  :root { --bg:#0b0f14; --panel:#131a22; --line:#2a3542; --fg:#e6edf3; --muted:#8b98a8;
+          --accent:#58a6ff; --ok:#3fb950; --bad:#f85149; --warn:#f0883e; --violet:#bc8cff; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--fg); font-family:-apple-system,"PingFang SC","Helvetica Neue",sans-serif; overflow:hidden; }
+  .slide { display:none; width:100vw; height:100vh; padding:5vh 6vw 9vh; flex-direction:column; overflow-y:auto; }
+  .slide.active { display:flex; }
+  h1 { font-size:2.4em; margin-bottom:.3em; }
+  h2 { font-size:1.8em; margin-bottom:.5em; color:var(--accent); flex:none; }
+  h3 { font-size:1.1em; margin:.6em 0 .3em; color:var(--accent); }
+  p, li { font-size:1.02em; line-height:1.7; }
+  ul { padding-left:1.3em; }
+  .sub { color:var(--muted); }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:1em 1.3em; margin:.45em 0; }
+  .row { display:flex; gap:1.6vw; align-items:stretch; }
+  .row > * { flex:1; min-width:0; }
+  code { font-family:"SF Mono",Menlo,monospace; font-size:.92em; background:#1c2530; border-radius:5px; padding:.05em .35em; }
+  pre { font-family:"SF Mono",Menlo,monospace; background:#0e141b; border:1px solid var(--line); border-radius:10px; padding:.8em 1em; font-size:.82em; line-height:1.55; overflow-x:auto; white-space:pre-wrap; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); } .warn { color:var(--warn); } .violet { color:var(--violet); }
+  table { border-collapse:collapse; margin:.4em 0; font-size:.95em; width:100%; }
+  th, td { border:1px solid var(--line); padding:.4em .7em; text-align:left; }
+  th { background:#182230; color:var(--accent); }
+  img.diag { width:100%; border-radius:10px; border:1px solid var(--line); background:#fff; }
+  .caption { text-align:center; color:var(--muted); margin-top:.3em; font-size:.85em; }
+  .tag { display:inline-block; background:#1f6feb33; color:var(--accent); border-radius:6px; padding:.08em .55em; font-size:.8em; margin:0 .3em .2em 0; white-space:nowrap; }
+  .tag.ok { background:#3fb95022; color:var(--ok); } .tag.bad { background:#f8514922; color:var(--bad); } .tag.warn { background:#f0883e22; color:var(--warn); }
+  .kpi { font-size:1.7em; font-weight:700; }
+  .kpis { display:flex; gap:1.2vw; margin:.4em 0; }
+  .kpis .card { flex:1; text-align:center; padding:.7em; }
+  .kpis .sub { font-size:.8em; }
+  .oneline { border-left:4px solid var(--violet); background:#bc8cff11; padding:.6em 1em; border-radius:0 10px 10px 0; margin:.5em 0; }
+  /* accordion */
+  .step { border:1px solid var(--line); border-radius:10px; margin:.35em 0; background:var(--panel); overflow:hidden; }
+  .step-head { width:100%; text-align:left; background:none; border:none; color:var(--fg); padding:.7em 1em; font-size:1em; cursor:pointer; display:flex; gap:.6em; align-items:center; }
+  .step-head:hover { background:#ffffff08; }
+  .step-head .n { background:#1f6feb; color:#fff; border-radius:50%; width:1.5em; height:1.5em; display:inline-flex; align-items:center; justify-content:center; font-size:.8em; flex:none; }
+  .step-head .st { margin-left:auto; flex:none; }
+  .step-body { display:none; padding:.4em 1em .9em 3.1em; }
+  .step.open .step-body { display:block; }
+  /* charts */
+  .chart-box { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:.8em; position:relative; }
+  .chart-tip { position:absolute; pointer-events:none; background:#000d; border:1px solid var(--line); border-radius:8px; padding:.35em .6em; font-size:.78em; display:none; z-index:5; white-space:nowrap; }
+  .toggle { display:inline-flex; gap:.4em; margin:.3em 0; }
+  .toggle button { background:#1c2530; color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:.3em .9em; cursor:pointer; font-size:.85em; }
+  .toggle button.on { background:#1f6feb; border-color:#1f6feb; }
+  /* nav */
+  #bar { position:fixed; top:0; left:0; height:3px; background:var(--accent); width:0; z-index:9; transition:width .2s; }
+  #nav { position:fixed; bottom:2.2vh; right:3vw; display:flex; gap:.5em; align-items:center; z-index:9; }
+  #nav button { background:#1c2530; color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:.35em 1em; cursor:pointer; }
+  #nav button:hover { background:#1f6feb; }
+  #toc { position:fixed; bottom:2.2vh; left:3vw; z-index:9; display:flex; gap:.4em; }
+  #toc button { background:#1c253088; color:var(--muted); border:1px solid var(--line); border-radius:8px; padding:.35em .7em; cursor:pointer; font-size:.8em; }
+  #toc button:hover { color:var(--fg); border-color:var(--accent); }
+  /* ---- 学习模式：可点击术语 + 解释抽屉 ---- */
+  .term { color:var(--accent); border-bottom:1px dashed #58a6ff88; cursor:help; }
+  .term:hover { background:#1f6feb33; border-radius:3px; }
+  #drawer { position:fixed; top:0; right:0; width:min(430px,92vw); height:100vh; background:#10161e;
+            border-left:1px solid var(--line); box-shadow:-8px 0 30px #000a; z-index:20;
+            transform:translateX(105%); transition:transform .25s; padding:2em 1.6em; overflow-y:auto; }
+  #drawer.open { transform:translateX(0); }
+  #drawer h3 { font-size:1.35em; color:var(--accent); margin-bottom:.6em; }
+  #drawer .plain { font-size:1.05em; line-height:1.8; }
+  #drawer .detail { color:var(--muted); font-size:.95em; line-height:1.75; margin-top:.8em;
+                    border-top:1px dashed var(--line); padding-top:.8em; }
+  #drawer .refs { margin-top:1em; }
+  #drawer .refs a { color:var(--violet); font-size:.9em; display:block; margin:.35em 0; line-height:1.5; }
+  #drawerClose { position:absolute; top:.8em; right:1em; background:none; border:none; color:var(--muted); font-size:1.4em; cursor:pointer; }
+  #drawerClose:hover { color:var(--fg); }
+  .hint { color:var(--muted); font-size:.85em; }
+  .hint .term { font-size:1em; }
+  /* 版图图例 */
+  .legend { display:flex; flex-wrap:wrap; gap:.4em 1.1em; justify-content:center; margin:.5em 0 .2em;
+            font-size:.88em; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:.5em .8em; }
+  .legend .sw { display:inline-block; width:.95em; height:.95em; border-radius:3px; margin-right:.3em; vertical-align:-0.12em; }
+  .legend .lt { color:var(--muted); margin-right:.3em; }
+</style>
+</head>
+<body>
+<div id="bar"></div>
+
+<!-- 1 封面 -->
+<section class="slide">
+  <h1>用 IonTrapClaw 复现 Quantinuum 三代离子阱架构</h1>
+  <p class="sub" style="font-size:1.25em">H1（线性）· H2（跑道环）· Helios（X junction）—— 一次 agent + claw 的能力边界实测</p>
+  <div class="kpis" style="margin-top:1.5em">
+    <div class="card"><div class="kpi">3</div><div class="sub">架构案例</div></div>
+    <div class="card"><div class="kpi">2</div><div class="sub">真实设计缺陷被发现并修复</div></div>
+    <div class="card"><div class="kpi">1</div><div class="sub">次数值假象被收敛性检查揭发</div></div>
+    <div class="card"><div class="kpi">~3 万</div><div class="sub">最大 BEM 面板规模</div></div>
+  </div>
+  <div class="oneline" style="margin-top:1.2em">所有数字均为本仓库 BEM 求解器的真实输出；所有失败与修复均真实发生。</div>
+  <p class="sub" style="margin-top:1.5em">← → 方向键翻页 · 左下角可跳转章节 · 图表可悬停读数</p>
+</section>
+
+<!-- 2 背景 -->
+<section class="slide">
+  <h2>背景：三代架构，junction 从 0 到 1</h2>
+  <table>
+    <tr><th></th><th>H1 (2021)</th><th>H2 (2023)</th><th>Helios (2025)</th></tr>
+    <tr><td>拓扑</td><td>一条直线走廊</td><td>跑道环（周期边界）</td><td>存储环 + 两条腿（cache + 逻辑区）</td></tr>
+    <tr><td>junction 数</td><td><b>0</b></td><td><b>0</b>（用整环旋转代替拐弯）</td><td><b>1</b>（四路 X junction）</td></tr>
+    <tr><td>比特数</td><td>20</td><td>32（可升 56）</td><td>98</td></tr>
+    <tr><td>电极 / 独立信号</td><td>198 / 198</td><td>376 / 268</td><td>1228 / 273</td></tr>
+    <tr><td>离子</td><td>¹⁷¹Yb⁺</td><td>¹⁷¹Yb⁺ + ¹³⁸Ba⁺ 冷却</td><td>¹³⁷Ba⁺</td></tr>
+    <tr><td>操作区</td><td>3→5 个 gate zone</td><td>8 个（上排分拣/下排操作，间距 750 µm）</td><td>8 个逻辑 zone，每批 16 比特</td></tr>
+  </table>
+  <div class="oneline">一句话：H1 和 H2 <b>刻意绕开</b> junction；Helios 第一次正面用上它。所以三个案例恰好考 claw 的三件事：<b>线性阱基本功</b>、<b>无生成器拓扑的逃生舱能力</b>、<b>junction 单元质量</b>。</div>
+  <p class="sub">数据来源：Pino et al. 2021 (H1) · Moses et al. 2023, PRX 13, 041052 (H2) · Ransford et al., arXiv:2511.05465 (Helios)</p>
+</section>
+
+<!-- 3 方法 -->
+<section class="slide">
+  <h2>方法：agent + claw 的设计闭环</h2>
+  <div class="row">
+    <div class="card">
+      <h3>闭环流程</h3>
+      <p>规格（人）→ <code>generate_trap</code> → <code>render_layout</code> 目检 → <code>evaluate_trap</code>（BEM）→ 诊断/迭代 → <code>solve_dc_voltages</code> → <code>drc_check</code> → <code>save_gds</code></p>
+    </div>
+    <div class="card">
+      <h3>三个案例各自考验</h3>
+      <p><span class="tag ok">H1</span>甜区：<code>five_wire</code> 原生支持，全程不停机</p>
+      <p><span class="tag ok">H2</span>跑道生成器已入库：<code>racetrack</code> 原生支持（本案例促成）</p>
+      <p><span class="tag bad">H</span><span class="tag">elios</span>缺陷发现：junction 生成器缺关键电极（已修复）</p>
+    </div>
+  </div>
+  <div class="card">
+    <h3>评价维度（benchmark 指标）</h3>
+    <p>达成规格的迭代轮数 · 物理合理性（收敛性检查）· 失败时的诊断质量 · 最终数值（null 高度 / 频率 / 阱深）· 工程产出（GDS / DC 电压表）</p>
+  </div>
+</section>
+
+<!-- 4 Case A 分隔 -->
+<section class="slide">
+  <h2>Case A · H1-like 线性阱</h2>
+  <div class="row">
+    <div class="card">
+      <h3>规格（模拟人类输入）</h3>
+      <pre>"设计一个 Yb+ 表面线性阱：11 对 DC 分段，
+离子高度 ~50 µm 量级，RF 100 V @ 30 MHz。
+评估阱特性，并给出中心区 (gate zone)
+的 DC 电压解。"</pre>
+    </div>
+    <div class="card">
+      <h3>对应真实架构</h3>
+      <p>H1 = 线性 QCCD：一条走廊，gate zone 一字排开，离子前后搬运配对。</p>
+      <p class="sub">本案例用 claw 原生 <code>five_wire</code> 生成器，是甜区测试。</p>
+    </div>
+  </div>
+  <div class="oneline">一句话理解线性阱：两根 RF 轨道夹着接地中央条，在芯片上方悬出一条"看不见的绳索"（RF null 线），离子串成队挂在上面；DC 分段决定谁能待在哪儿。</div>
+</section>
+
+<!-- 5 Case A trajectory -->
+<section class="slide">
+  <h2>Case A · 过程轨迹</h2>
+  <div id="trajA"></div>
+</section>
+
+<!-- 6 Case A 结果 -->
+<section class="slide">
+  <h2>Case A · 结果</h2>
+  <div class="row">
+    <div>
+      <img class="diag" src="data:image/png;base64,%%IMG_H1%%">
+      <div class="legend"></div>
+      <p class="caption">five_wire：11 对 DC 分段 + 中央条 + 外轨（27 电极）</p>
+      <table id="resA"></table>
+    </div>
+    <div>
+      <div class="chart-box"><div id="chartA"></div><div class="chart-tip"></div></div>
+      <p class="caption">|E| 沿高度 z 剖面（1 V RF）：深谷 = RF null（悬停读数） · <span class="term" data-term="chart_ez">📖 怎么看这张图？</span></p>
+      <div class="card" style="margin-top:.5em">
+        <h3>DC 反解（定义 gate zone）</h3>
+        <p>目标：场在 (0, 0, 25.1 µm) 归零 → 残差 <b class="ok">3.5×10⁻¹¹ V/m</b>，电压范围 [−0.15, +1.0] V，全部在 DAC 友好区间。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 7 Case B 分隔 -->
+<section class="slide">
+  <h2>Case B · H2-like 跑道环</h2>
+  <div class="row">
+    <div class="card">
+      <h3>规格</h3>
+      <pre>"H2 的架构：跑道形闭环，离子绕环循环，
+不要 junction。离子高度几十 µm，
+RF 按 H2 实际值 200 V @ 42 MHz。"</pre>
+    </div>
+    <div class="card">
+      <h3>难点</h3>
+      <p>claw <b>没有跑道生成器</b> → 用逃生舱能力：手写 shapely 几何构建器（<code>examples/racetrack.py</code>），同心双 RF 环 + 接地中环 + 直道 DC 分段。</p>
+      <p class="sub">跑道 = five_wire 的横截面弯成一个环：null 线闭合，离子可以"传送带"式整圈旋转。</p>
+    </div>
+  </div>
+  <div class="oneline">一句话理解跑道：直线阱的两端弯回来接上，离子永不分叉、永不掉头，排队绕圈就能完成任意配对——H2 用拓扑巧思回避了 junction 这个当时的工程难题。</div>
+</section>
+
+<!-- 8 Case B trajectory -->
+<section class="slide">
+  <h2>Case B · 过程轨迹（含一次数值假象）</h2>
+  <div id="trajB"></div>
+</section>
+
+<!-- 9 Case B 结果 -->
+<section class="slide">
+  <h2>Case B · 结果</h2>
+  <div class="row">
+    <div>
+      <img class="diag" src="data:image/png;base64,%%IMG_RACE%%">
+      <div class="legend"></div>
+      <p class="caption">跑道：同心双 RF 环 + 接地中环 + 直道 DC 分段（22 电极，弯道已优化）</p>
+      <table id="resB"></table>
+    </div>
+    <div>
+      <div class="chart-box"><div id="chartB"></div><div class="chart-tip"></div></div>
+      <p class="caption">沿整条跑道环的赝势（对数轴）：红虚线=优化前，绿实线=优化后（悬停读数） · <span class="term" data-term="chart_loop">📖 怎么看这张图？</span></p>
+      <div class="card" style="margin-top:.5em"><p class="sub">弯道的峰部分是"固定高度扫描"的方法学假象（弯道上 null 位置略漂移）——和真实 H2 一样，弯道几何需要单独优化。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 10 Case C 分隔 -->
+<section class="slide">
+  <h2>Case C · Helios-like X junction</h2>
+  <div class="row">
+    <div class="card">
+      <h3>规格</h3>
+      <pre>"Helios 的核心单元：一个四路 X junction，
+Ba-137，RF 120 V @ 25 MHz。
+评估走廊上的阱特性。"</pre>
+    </div>
+    <div class="card">
+      <h3>对应真实架构</h3>
+      <p>Helios 唯一的一个 junction 负责"环存储 ⇄ 腿"的全部路由，让分拣与计算并行——它是整机时钟频率的咽喉。</p>
+    </div>
+  </div>
+  <div class="oneline">一句话理解 junction：两条"悬空绳索"要交叉，但产生绳索的 RF 电极在芯片平面上不能立体交叉——交叉口场被扰乱，拱起一个赝势山坡。junction 设计的全部学问就是把这个山坡削到足够低。</div>
+</section>
+
+<!-- 11 Case C trajectory -->
+<section class="slide">
+  <h2>Case C · 过程轨迹（发现并修复真实缺陷）</h2>
+  <div id="trajC"></div>
+</section>
+
+<!-- 12 Case C 结果 -->
+<section class="slide">
+  <h2>Case C · 结果：修复前后</h2>
+  <div class="row">
+    <div>
+      <img class="diag" id="jxImg" src="data:image/png;base64,%%IMG_JX_FIXED%%">
+      <div class="legend"></div>
+      <p class="caption" id="jxCap">修复后：四条臂各多一条接地中央条（45 电极）</p>
+      <table id="resC"></table>
+    </div>
+    <div>
+      <div class="toggle">
+        <button id="btnAfter" class="on">修复后</button><button id="btnBefore">修复前</button>
+      </div>
+      <div class="chart-box"><div id="chartC"></div><div class="chart-tip"></div></div>
+      <p class="caption">臂中线上方 |E|(z)（1 V RF，对数轴）：修复前无谷 = 没有 null = 囚禁不了离子 · <span class="term" data-term="chart_ba">📖 怎么看这张图？</span></p>
+    </div>
+  </div>
+</section>
+
+<!-- 13 方法学 -->
+<section class="slide">
+  <h2>数值方法学：收敛性与规模墙</h2>
+  <div class="row">
+    <div class="card">
+      <h3>面板收敛性（null 高度 µm）</h3>
+      <table id="convTbl"></table>
+      <p class="sub">三个案例粗→细面板变化均 &lt;2%：null 位置对面板密度不敏感（几何正确的前提下）。</p>
+    </div>
+    <div class="card">
+      <h3>BEM 规模墙（稠密矩阵）</h3>
+      <table>
+        <tr><th>面板数</th><th>矩阵内存</th><th>实际观测</th></tr>
+        <tr><td>~4k</td><td>128 MB</td><td>&lt;1 s</td></tr>
+        <tr><td>~10k</td><td>0.9 GB</td><td>~6 s（全新进程）</td></tr>
+        <tr><td>~16k</td><td>2.1 GB</td><td>~25 s</td></tr>
+        <tr><td>~27k</td><td>6 GB</td><td>分钟级以上，长会话中观察到数量级恶化</td></tr>
+        <tr><td>2mm² 全芯片 @10µm</td><td>~13 GB</td><td class="bad">不可行 → 必须单元级分而治之</td></tr>
+      </table>
+      <p class="sub">经验法则：面板尺寸 ≤ 最小电极间隙；细面板任务建议独立进程跑，避免内存累积。</p>
+    </div>
+  </div>
+  <div class="oneline">Case B 的教训：粗面板在"几何有 bug"时会给出看起来合理的假 null——<b>任何重要结论都要做面板收敛性检查</b>。</div>
+</section>
+
+<!-- 14 横向对比 -->
+<section class="slide">
+  <h2>横向对比：claw 在三代架构上的表现</h2>
+  <table>
+    <tr><th></th><th>H1-like</th><th>H2-like</th><th>Helios-like</th></tr>
+    <tr><td>生成路径</td><td><span class="tag ok">原生 five_wire</span></td><td><span class="tag warn">逃生舱手写 builder</span></td><td><span class="tag ok">原生 x_junction</span>（修复后）</td></tr>
+    <tr><td>电极 / 面板</td><td>27 / ~4.3k</td><td>22 / ~10.4k</td><td>45 / ~2.3k</td></tr>
+    <tr><td>null 高度</td><td>25.1 µm</td><td>30.6 µm</td><td>20.9 µm</td></tr>
+    <tr><td>径向频率</td><td>16.3 MHz</td><td>13.5 MHz</td><td>41.0 MHz</td></tr>
+    <tr><td>阱深</td><td>~10⁻⁶ eV（轴向待 DC）</td><td>~10⁻⁵ eV（环向自由，物理正确）</td><td>1.44 eV</td></tr>
+    <tr><td>DC 反解</td><td class="ok">✓ 残差 10⁻¹¹ V/m</td><td>未测（同机制）</td><td>未测（同机制）</td></tr>
+    <tr><td>关键事件</td><td>全程顺利</td><td>带孔多边形 bug → 假 null → 修复</td><td>生成器缺中央条 → 无 null → 修复并固化</td></tr>
+  </table>
+  <div class="oneline">能力边界画像：<b>甜区</b> = 直线/junction 单元级设计验证；<b>逃生舱可达</b> = 任意 2D 拓扑（跑道已验证）；<b>当前墙</b> = 整芯片 BEM（内存 O(N²)）与多 junction 网格拼装。</div>
+</section>
+
+<!-- 15 benchmark 建议 -->
+<section class="slide">
+  <h2>作为 Benchmark：建议的评分维度</h2>
+  <div class="row">
+    <div class="card"><h3>效率</h3><ul><li>达成规格的迭代轮数 / 工具调用数</li><li>BEM 耗时 vs 面板数的选择合理性</li><li>一次 DRC 通过率</li></ul></div>
+    <div class="card"><h3>物理判断力</h3><ul><li>是否做面板收敛性检查</li><li>能否识别"好得可疑"的假 null</li><li>是否正确处理轴向/环向自由度（阱深数字的解读）</li></ul></div>
+    <div class="card"><h3>工程产出</h3><ul><li>GDS + JSON 可复开复算</li><li>DC 电压表的幅值可行性</li><li>发现缺陷后的修复是否固化（生成器 + 回归测试）</li></ul></div>
+  </div>
+  <div class="card"><p>三个案例构成天然难度阶梯：<b>A</b> 测基本功 → <b>B</b> 测逃生舱与数值存疑心 → <b>C</b> 测缺陷诊断与领域知识。</p></div>
+</section>
+
+<!-- 16 结尾 -->
+<section class="slide">
+  <h2>本次实测已落地的修复与产出</h2>
+  <div class="row">
+    <div class="card">
+      <h3 class="ok">已修复</h3>
+      <ul>
+        <li><code>junction.py</code>：新增 <code>center_strip=True</code> 参数，臂上自动生成接地中央条</li>
+        <li><code>racetrack</code> 跑道生成器入库（含弯道优化参数化 <code>bend_profile</code>）</li>
+        <li><b>通用几何优化器内建</b>：<code>optimize_trap</code> 工具（目标/约束 JSON 化，Nelder-Mead 闭环）</li>
+        <li>新增 8 个测试（含"无中央条→无 null"物理回归、优化器收敛），36 项全过</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="warn">建议的下一步</h3>
+      <ul>
+        <li>racetrack 构建器入生成器库 + 测试（含已完成的弯道优化参数化）</li>
+        <li>直道-弯道接缝处的渐变剖面（taper），消除残余赝势峰</li>
+        <li>"沿 null 路径的 junction bump 扫描"做成正式工具</li>
+        <li>BEM 加速（加速求值/分块 LU）或自动面板密度建议（≤ 最小间隙）</li>
+        <li>长会话内存管理（大求解独立子进程）</li>
+      </ul>
+    </div>
+  </div>
+  <div class="oneline">结论：claw 已能端到端完成 H1 级设计、在逃生舱辅助下完成 H2 级拓扑、并能发现 Helios 级单元的真实设计缺陷——作为三代架构 benchmark 的基础是扎实的。</div>
+</section>
+
+<div id="toc"></div>
+<div id="nav"><span class="hint" style="margin-right:.8em">蓝色虚线词都能点开解释</span><span id="pg" class="sub"></span><button onclick="show(i-1)">←</button><button onclick="show(i+1)">→</button></div>
+<div id="drawer"><button id="drawerClose">✕</button><div id="drawerBody"></div></div>
+
+<script>
+const DATA = %%DATA%%;
+
+/* ---------- navigation ---------- */
+const slides = document.querySelectorAll('.slide');
+let i = 0;
+const tocLabels = ["封面","背景","方法","A·规格","A·过程","A·结果","B·规格","B·过程","B·结果","C·规格","C·过程","C·结果","方法学","对比","Benchmark","总结"];
+const toc = document.getElementById('toc');
+tocLabels.forEach((t,k)=>{ const b=document.createElement('button'); b.textContent=t; b.onclick=(e)=>{e.stopPropagation();show(k);}; toc.appendChild(b); });
+function show(n){ i=Math.max(0,Math.min(slides.length-1,n));
+  slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+  document.getElementById('pg').textContent=(i+1)+' / '+slides.length;
+  document.getElementById('bar').style.width=((i+1)/slides.length*100)+'%';
+  [...toc.children].forEach((b,k)=>b.style.color = k===i ? '#58a6ff' : '');
+}
+document.addEventListener('keydown',e=>{ if(e.key==='ArrowRight'||e.key===' ') show(i+1); if(e.key==='ArrowLeft') show(i-1); });
+
+/* ---------- accordion ---------- */
+function buildSteps(id, steps){
+  const box=document.getElementById(id);
+  steps.forEach((s,k)=>{
+    const d=document.createElement('div'); d.className='step';
+    d.innerHTML=`<button class="step-head"><span class="n">${k+1}</span><span>${s.title}</span><span class="st ${s.cls||''}">${s.status||''}</span></button><div class="step-body">${s.body}</div>`;
+    d.querySelector('.step-head').onclick=(e)=>{e.stopPropagation(); d.classList.toggle('open');};
+    box.appendChild(d);
+  });
+  box.children[0].classList.add('open');
+}
+
+/* ---------- result tables ---------- */
+function resTable(id, rows){
+  document.getElementById(id).innerHTML =
+    '<tr><th>指标</th><th>数值</th></tr>' +
+    rows.map(r=>`<tr><td>${r[0]}</td><td><b>${r[1]}</b></td></tr>`).join('');
+}
+
+/* ---------- line chart (SVG, hover crosshair) ---------- */
+function lineChart(elId, series, opts){
+  const el=document.getElementById(elId), box=el.parentElement, tip=box.querySelector('.chart-tip');
+  const W=620,H=340,ml=64,mr=16,mt=14,mb=44;
+  const xsAll=series.flatMap(s=>s.x), ysAll=series.flatMap(s=>s.y.filter(v=>v>0));
+  const x0=Math.min(...xsAll), x1=Math.max(...xsAll);
+  let y0,y1, Y;
+  if(opts.logy){ y0=Math.log10(Math.min(...ysAll)); y1=Math.log10(Math.max(...ysAll));
+    Y=v=>mt+(y1-Math.log10(Math.max(v,1e-12)))/(y1-y0)*(H-mt-mb);
+  } else { y0=0; y1=Math.max(...ysAll)*1.05; Y=v=>mt+(y1-v)/(y1-y0)*(H-mt-mb); }
+  const X=v=>ml+(v-x0)/(x1-x0)*(W-ml-mr);
+  let g='';
+  // axes + ticks
+  const nx=5, ny=4;
+  for(let k=0;k<=nx;k++){ const xv=x0+(x1-x0)*k/nx, px=X(xv);
+    g+=`<line x1="${px}" y1="${mt}" x2="${px}" y2="${H-mb}" stroke="#2a3542"/><text x="${px}" y="${H-mb+16}" fill="#8b98a8" font-size="11" text-anchor="middle">${xv.toFixed(0)}</text>`; }
+  for(let k=0;k<=ny;k++){ const t=k/ny, pv=opts.logy?Math.pow(10,y0+(y1-y0)*t):y0+(y1-y0)*t, py=opts.logy?Y(Math.pow(10,y0+(y1-y0)*t)):Y(y0+(y1-y0)*t);
+    g+=`<line x1="${ml}" y1="${py}" x2="${W-mr}" y2="${py}" stroke="#2a3542"/><text x="${ml-6}" y="${py+4}" fill="#8b98a8" font-size="11" text-anchor="end">${opts.logy?'1e'+(y0+(y1-y0)*t).toFixed(0):pv.toFixed(1)}</text>`; }
+  g+=`<text x="${(ml+W-mr)/2}" y="${H-6}" fill="#8b98a8" font-size="12" text-anchor="middle">${opts.xlabel}</text>`;
+  g+=`<text x="14" y="${(mt+H-mb)/2}" fill="#8b98a8" font-size="12" text-anchor="middle" transform="rotate(-90 14 ${(mt+H-mb)/2})">${opts.ylabel}</text>`;
+  series.forEach(s=>{
+    const pts=s.x.map((v,k)=>X(v)+','+Y(s.y[k])).join(' ');
+    g+=`<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2" ${s.dash?'stroke-dasharray="6 4"':''}/>`;
+  });
+  g+=`<line id="xl-${elId}" x1="0" y1="${mt}" x2="0" y2="${H-mb}" stroke="#58a6ff" stroke-width="1" visibility="hidden"/>`;
+  series.forEach((s,si)=>{ g+=`<circle id="pt-${elId}-${si}" r="4" fill="${s.color}" visibility="hidden"/>`; });
+  // legend
+  series.forEach((s,si)=>{ g+=`<rect x="${ml+12}" y="${mt+10+si*18}" width="14" height="3" fill="${s.color}"/><text x="${ml+32}" y="${mt+16+si*18}" fill="#e6edf3" font-size="11">${s.label}</text>`; });
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:100%">${g}</svg>`;
+  const svg=el.querySelector('svg');
+  svg.addEventListener('mousemove',e=>{
+    const r=svg.getBoundingClientRect();
+    const mx=(e.clientX-r.left)/r.width*W;
+    if(mx<ml||mx>W-mr){tip.style.display='none';return;}
+    const xv=x0+(mx-ml)/(W-ml-mr)*(x1-x0);
+    document.getElementById('xl-'+elId).setAttribute('x1',X(xv));
+    document.getElementById('xl-'+elId).setAttribute('x2',X(xv));
+    document.getElementById('xl-'+elId).setAttribute('visibility','visible');
+    let html=`${opts.xlabel.split(' ')[0]} = ${xv.toFixed(1)}<br>`;
+    series.forEach((s,si)=>{
+      let bi=0,bd=1e18; s.x.forEach((v,k)=>{const d=Math.abs(v-xv); if(d<bd){bd=d;bi=k;}});
+      const c=document.getElementById(`pt-${elId}-${si}`);
+      c.setAttribute('cx',X(s.x[bi])); c.setAttribute('cy',Y(s.y[bi])); c.setAttribute('visibility','visible');
+      html+=`<span style="color:${s.color}">●</span> ${s.label}: ${s.y[bi].toPrecision(3)}<br>`;
+    });
+    tip.innerHTML=html; tip.style.display='block';
+    const br=box.getBoundingClientRect();
+    tip.style.left=(e.clientX-br.left+14)+'px'; tip.style.top=(e.clientY-br.top-10)+'px';
+  });
+  svg.addEventListener('mouseleave',()=>{tip.style.display='none';
+    document.getElementById('xl-'+elId).setAttribute('visibility','hidden');
+    series.forEach((s,si)=>document.getElementById(`pt-${elId}-${si}`).setAttribute('visibility','hidden'));});
+}
+
+/* ---------- fill content ---------- */
+const R=DATA;
+resTable('resA', [
+  ['生成','five_wire · 27 电极 · 瞬時'],
+  ['RF null 高度', R.h1.result.rf_null_height_um.toFixed(2)+' µm'],
+  ['径向频率', R.h1.result.secular_frequencies_mhz[1].toFixed(1)+' MHz（两个径向简并）'],
+  ['轴向频率', R.h1.result.secular_frequencies_mhz[0].toFixed(3)+' MHz（无 DC ≈ 自由，物理正确）'],
+  ['DC 反解残差', R.h1x.dc_residual.toExponential(1)+' V/m'],
+]);
+resTable('resB', [
+  ['生成','逃生舱 builder · 22 电极'],
+  ['RF null', `y=${R.h2.null[1].toFixed(1)} µm（走廊中线）, z=${R.h2.null[2].toFixed(1)} µm`],
+  ['径向频率', R.h2.result.secular_frequencies_mhz[1].toFixed(1)+' MHz'],
+  ['弯道优化', `7 自由度自由寻优 → 高度差 −0.001 µm，环赝势峰 ${Math.max(...R.h2f.psi_before).toFixed(0)} → ${Math.max(...R.h2f.psi_after).toFixed(1)} meV（−68%）`],
+  ['驱动点','200 V @ 42 MHz（H2 真实值）'],
+]);
+resTable('resC', [
+  ['生成','x_junction · 45 电极（修复后）'],
+  ['RF null 高度', R.helios.result.rf_null_height_um.toFixed(2)+' µm'],
+  ['阱深', R.helios.result.trap_depth_ev.toFixed(2)+' eV（走廊尽头真实势垒）'],
+  ['径向频率', R.helios.result.secular_frequencies_mhz[1].toFixed(1)+' MHz'],
+  ['离子 / 驱动', R.helios.ion+' · '+R.helios.rf],
+]);
+
+buildSteps('trajA', [
+ {title:'自然语言规格 → generate_trap("five_wire", 11 对分段)', status:'✓ 0.01 s', cls:'ok',
+  body:'<pre>generate_trap(trap_type="five_wire", params={n_dc_segments: 11})\n→ 27 电极：RF_L/RF_R + CENTER + 22 分段 DC + 2 外轨\n间距严格等于参数（dc_gap=5, rf_gap=5 µm），drc_check 一次通过</pre>'},
+ {title:'render_layout 目检几何', status:'✓', cls:'ok',
+  body:'<p>渲染 PNG 确认拓扑正确后再花 BEM 的钱——这是 skill 里固化的流程（BEM 是最贵步骤，先看图）。</p>'},
+ {title:'evaluate_trap：BEM 表征', status:'✓ ~1 s（4.3k 面板）', cls:'ok',
+  body:`<pre>null 高度 ${R.h1.result.rf_null_height_um.toFixed(1)} µm · 径向 ${R.h1.result.secular_frequencies_mhz[1].toFixed(1)} MHz · 轴向 ≈ 0\n解读：DC 全接地时轴向无束缚，"阱深 ~10⁻⁶ eV"不是错误，\n是"还没定义 zone"的物理事实 → 进入下一步</pre>`},
+ {title:'solve_dc_voltages：定义中心 gate zone', status:'✓', cls:'ok',
+  body:`<pre>目标：场在 (0, 0, 25.1 µm) 归零\n→ 残差 ${R.h1x.dc_residual.toExponential(1)} V/m，|V| ≤ 1.0 V\n主力电极：DC_OUTER_L +1.0 V，DC0_U +0.19 V，CENTER +0.15 V…\n同一接口沿轴向扫一串目标点即得穿梭波形（shuttle_waveform）</pre>`},
+ {title:'结论', status:'甜区', cls:'ok',
+  body:'<p>H1 级线性阱：<b>零停顿</b>走完全部闭环。这是 claw 的基本功基线。</p>'},
+]);
+
+buildSteps('trajB', [
+ {title:'发现缺口：没有跑道生成器 → 逃生舱手写 builder', status:'路线决策', cls:'warn',
+  body:'<pre>examples/racetrack.py：shapely 把线段 buffer 成"体育场"胶囊，\n环形电极 = 外胶囊 − 内胶囊；同心双 RF 环 + 接地中环\n（five_wire 横截面弯成环）+ 直道 DC 分段 + 端帽地</pre>'},
+ {title:'第一次评估：null 在 20.65 µm，频率 21.4 MHz', status:'✓ 通过？', cls:'ok',
+  body:'<p>所有数字看起来合理——<b>但"看起来合理"恰恰是最危险的状态</b>。</p>'},
+ {title:'收敛性检查揭发假象：panel 12 → 6 µm 后 null 消失、电势 −8.5 V（只加了 1 V！）', status:'✗ 非物理', cls:'bad',
+  body:'<pre>粗面板下 BEM 给出稳定但错误的解。加密后假象破灭：\nφ = −8.5 V 违反最大值原理 → 几何或离散必有 bug，不是物理</pre>'},
+ {title:'根因：环形电极是"带孔多边形"，只取了外轮廓 → 环变实心盘，电极重叠', status:'诊断', cls:'warn',
+  body:'<pre>shapely 的 difference 产生带 hole 的 Polygon；\n数据模型只存 exterior → 中心接地胶囊被实心 RF 盘盖住，\n同一块区域既是地又是 RF → 边界条件自相矛盾 → 垃圾解</pre>'},
+ {title:'修复：环切分成上下两个半环（无孔多边形）→ 复验', status:'✓', cls:'ok',
+  body:`<pre>真 null：y = ${R.h2.null[1].toFixed(1)} µm（走廊中线 76）, z = ${R.h2.null[2].toFixed(1)} µm\n径向 ${R.h2.result.secular_frequencies_mhz[1].toFixed(1)} MHz · 收敛性 panel 12→4 µm 变化 < 1%</pre>`},
+ {title:'环赝势扫描：直道 ≈ 0，弯道 ~25 meV 峰', status:'✓ 发现真实物理', cls:'ok',
+  body:'<p>闭环上赝势均匀性直接决定"传送带"运输的加热——这正是 H2 弯道几何要优化的对象。注意：峰含固定高度扫描的方法学成分，严格评估应沿 null 轨迹扫。</p>'},
+ {title:'弯道优化第一轮：两个旋钮，2D 扫描 28 组设计点', status:'✓ −74%', cls:'ok',
+  body:`<pre>旋钮 bend_shift（弯道整圈半径偏移）+ bend_trim（内外 RF 环宽度此消彼长）\n粗扫 4×4 → 细化 4×3 → 最优 (3, −3.5) µm\n弯道赝势峰 23.7 → 6.2 meV，但 null 下沉残留 0.93 µm——两个旋钮的自由度到头了</pre>`},
+ {title:'弯道优化第二轮：放开全部 7 条电极边界，自动寻优（此能力已固化为内置工具 optimize_trap）', status:'✓ 优化到底', cls:'ok',
+  body:`<pre>7 个自由度：弯道上中心地/内RF两缘/中环两缘/外RF两缘各自的半径偏移\n目标函数（JSON 描述，agent 可直接调用）：\n  null_uniform（直道 vs 弯道 null 一致性，权重 100）\n  + bump（弯道弧赝势峰，权重 1）+ 最小间隙 3.5 µm 硬约束\n内置优化器 251 次评估、11 分钟收敛：\n  直道 vs 弯道 null 高度差：0.0065 µm\n  弯道 null 面内偏移：0.02 µm\n  弯道赝势峰 23.7 → 1.02 meV（−96%）\n细面板（6 µm）独立复验：整环赝势峰 24.0 → 7.7 meV（−68%）</pre>`},
+ {title:'结论', status:'✓ 完成', cls:'ok',
+  body:'<p>弯道走廊的均匀性已被优化到<b>纳米级</b>（Δz ≈ 20 nm）。整环残余的 7.7 meV 峰来自直道与弯道<b>接缝处</b>的剖面突变——再往下需要让剖面沿弧长渐变（taper），这是下一级自由度。整个过程：规格 → 失败 → 诊断 → 修复 → 优化到底，全部由 claw 的闭环完成。</p>'},
+]);
+
+buildSteps('trajC', [
+ {title:'generate_trap("x_junction", 4 段臂) → 41 电极', status:'✓ 0.02 s', cls:'ok',
+  body:'<pre>中央 RF 岛 + 4 臂 RF 轨道 + 4 角电极 + 32 分段 DC\n几何间距解析严格（无需布尔运算）</pre>'},
+ {title:'evaluate_trap → RuntimeError: trap minimum search failed', status:'✗ 失败', cls:'bad',
+  body:'<p>赝势最小化直接跑出边界。直线阱从没见过这种失败。</p>'},
+ {title:'诊断：沿臂中线扫 |E|(z) → 单调衰减，不存在 null', status:'诊断', cls:'warn',
+  body:'<pre>|E|: 7956 → 9434 → 8241 → 6600 → 4047 → 2112 V/m（z=10..90）\n两根同电位 RF 轨道 = 单根宽导体 → 形不成四极场</pre>'},
+ {title:'根因：junction 臂上缺接地中央条（five_wire 有，junction 没有）', status:'根因', cls:'warn',
+  body:'<p>对比 five_wire 的横截面立刻可见：<code>CENTER</code> 接地条是四极场的必要条件。这是生成器的真实缺陷——真实设计里对应"中央 RF 回流导体走另一层"的工艺决策。</p>'},
+ {title:'修复：escape hatch 补 4 条接地中央条 → 当场复验', status:'✓', cls:'ok',
+  body:`<pre>|E|(z=20 µm): 9434 → 511 V/m，null 出现\n表征：null ${R.helios.result.rf_null_height_um.toFixed(1)} µm · 阱深 ${R.helios.result.trap_depth_ev.toFixed(2)} eV · 径向 ${R.helios.result.secular_frequencies_mhz[1].toFixed(1)} MHz</pre>`},
+ {title:'固化：修复进入 junction.py（center_strip=True 默认）+ 3 个回归测试', status:'✓ 已合入', cls:'ok',
+  body:'<p>含一个物理回归测试："无中央条 → 无 null"的签名会被 CI 立刻抓住。32 项测试全过。</p>'},
+]);
+
+/* convergence table */
+(function(){
+  const rows=[['面板尺寸','H1 线性','H2 跑道','Helios junction']];
+  const byP={};
+  (R.h1x.conv||[]).forEach(r=>{(byP[r.panel]=byP[r.panel]||{})['h1']=r;});
+  R.conv.racetrack.forEach(r=>{(byP[r.panel]=byP[r.panel]||{})['race']=r;});
+  R.conv.junction.forEach(r=>{(byP[r.panel]=byP[r.panel]||{})['jx']=r;});
+  Object.keys(byP).sort((a,b)=>b-a).forEach(p=>{
+    const g=byP[p];
+    rows.push([p+' µm',
+      g.h1?g.h1.null_z+' µm ('+(g.h1.n_panels/1000).toFixed(1)+'k)':'—',
+      g.race?g.race.null_z+' µm ('+(g.race.n_panels/1000).toFixed(1)+'k)':'—',
+      g.jx?g.jx.null_z+' µm ('+(g.jx.n_panels/1000).toFixed(1)+'k)':'—']);
+  });
+  document.getElementById('convTbl').innerHTML =
+    '<tr>'+rows[0].map(h=>`<th>${h}</th>`).join('')+'</tr>' +
+    rows.slice(1).map(r=>'<tr>'+r.map(c=>`<td>${c}</td>`).join('')+'</tr>').join('');
+})();
+
+/* charts */
+lineChart('chartA', [{x:R.h1.ez_z, y:R.h1.ez, label:'|E| (1 V RF)', color:'#58a6ff'}],
+  {xlabel:'z (µm)', ylabel:'|E| (V/m)', logy:true});
+lineChart('chartB', [
+  {x:R.h2f.s, y:R.h2f.psi_before, label:'优化前（弯道峰 24 meV）', color:'#f85149', dash:true},
+  {x:R.h2f.s, y:R.h2f.psi_after,  label:'优化后（峰 10.7 meV）', color:'#3fb950'},
+], {xlabel:'弧长 (µm)', ylabel:'Ψ (meV)', logy:true});
+function drawC(which){
+  const s=[];
+  if(which!=='before') s.push({x:R.helios.ez_z, y:R.helios.ez_after, label:'修复后（有中央条）', color:'#3fb950'});
+  if(which!=='after')  s.push({x:R.helios.ez_z, y:R.helios.ez_before, label:'修复前（无中央条）', color:'#f85149', dash:true});
+  lineChart('chartC', s, {xlabel:'z (µm)', ylabel:'|E| (V/m)', logy:true});
+  document.getElementById('jxImg').src = 'data:image/png;base64,' + (which==='before' ? '%%IMG_JX_BEFORE%%' : '%%IMG_JX_FIXED%%');
+  document.getElementById('jxCap').textContent = which==='before' ? '修复前：臂上 RF 轨道之间是空衬底（41 电极）' : '修复后：四条臂各多一条接地中央条（45 电极）';
+  document.getElementById('btnAfter').classList.toggle('on', which!=='before');
+  document.getElementById('btnBefore').classList.toggle('on', which==='before');
+}
+document.getElementById('btnAfter').onclick=e=>{e.stopPropagation();drawC('after');};
+document.getElementById('btnBefore').onclick=e=>{e.stopPropagation();drawC('before');};
+drawC('after');
+
+/* ==================== 学习模式：术语词典 + 解释抽屉 ================= */
+const GLOSSARY = {
+"RF": {match:["RF"], title:"RF（射频电压）",
+ plain:"RF = Radio Frequency，射频。就是一个每秒钟来回振荡几千万次的电压（比如 30 MHz = 每秒 3000 万次）。离子跟不上这么快的变化，只感受到平均效果——这个平均效果像一根无形的弹簧，把离子按在半空中。RF 电压越高、频率越快，弹簧越紧。",
+ detail:"为什么不用直流电压直接困住离子？因为静电学有个定理（Earnshaw 定理）：纯电场无法在三维空间同时把带电粒子往中间压。所以必须用快速振荡的电场——某个瞬间把离子往左推、下个瞬间往右推，平均下来等效于一个稳定的囚禁势，叫'赝势'（见'赝势'词条）。这是 1958 年 Wolfgang Paul 发明的，1989 年因此获诺贝尔奖。",
+ refs:[["Bruzewicz et al., 离子阱量子计算综述 (2019), arXiv:1904.04178","https://arxiv.org/abs/1904.04178"]]},
+"RF null": {match:["RF null","零场线","RF-null"], title:"RF null（射频零场线）",
+ plain:"RF 电极排布合适时，芯片上方某一条线上振荡电场恰好完全抵消——场强为零。离子待在这条线上就几乎不受力，像绳索悬浮在空中。这条线就是 RF null，'离子高度'就是这条线离芯片的距离（通常几十微米，比头发丝还细）。",
+ detail:"本演示文稿里的 |E|(z) 图中那个深深的'V 形谷'就是 null：谷的深度越接近零，说明电极几何越对称、越理想。找不到谷 = 这个几何困不住离子——Helios 案例的 junction 缺陷就是这么被发现的。"},
+"赝势": {match:["赝势","pseudopotential"], title:"赝势（pseudopotential）",
+ plain:"快速振荡电场的'平均效果'等效成一个静止的势能面，叫赝势。离子在赝势面上就像小球在碗底滚动：碗越深陷得越稳，碗的形状决定振动快慢。阱深、囚禁频率这些指标都是从赝势算出来的。",
+ detail:"公式：Ψ = Q²|E|²/(4mΩ²)。Q 是离子电荷，m 是质量，Ω 是 RF 角频率。注意 Ψ ∝ |E|²——场强越大的地方势能越高，所以离子被推向场最弱的 RF null 处，这就是囚禁的物理图像。",
+ refs:[["Bruzewicz et al. (2019), 第 II 节, arXiv:1904.04178","https://arxiv.org/abs/1904.04178"]]},
+"径向频率": {match:["径向频率","轴向频率","secular","囚禁频率"], title:"囚禁频率（secular frequency）",
+ plain:"离子被困在赝势碗里会来回振动，振动的快慢就是囚禁频率，单位 MHz（每秒百万次）。沿走廊方向的叫'轴向'，垂直方向的两个叫'径向'。频率越高说明束缚越紧。典型值：径向几 MHz，轴向不到 1 MHz。",
+ detail:"做量子门时用激光驱动离子的振动来传递纠缠，频率高低直接决定门的速度上限。本演示中 H1 案例轴向频率只有 0.013 MHz——因为没加 DC 电压，轴向上等于没束缚，这不是 bug，是'还没定义工作区'的物理事实。"},
+"阱深": {match:["阱深"], title:"阱深（trap depth）",
+ plain:"离子要逃跑需要翻越的最低势能山坡，单位 eV（电子伏特）。阱深越大，离子越不容易被热运动或碰撞弹飞。作为参考：室温下粒子的热动能约 0.025 eV，所以阱深至少要它的几十倍才稳。",
+ detail:"H1/H2 案例里阱深只有 10⁻⁶~10⁻⁵ eV，看着吓人，其实是正确的物理：那时还没加 DC 电压，离子沿走廊方向是自由的——'阱深'量的是最容易逃跑的方向。Helios junction 案例的 1.44 eV 才是真势垒（走廊尽头 RF 轨道终止形成的）。"},
+"DC": {match:["DC"], title:"DC 电极（直流控制电极）",
+ plain:"DC = 直流电（不振荡的恒定电压）。RF 负责'造绳子'，DC 负责'在绳子上划出停车位'：给不同位置的分段电极加不同电压，就能决定离子停在走廊的哪个位置、什么时候搬家。一块芯片上有几十到上千个 DC 电极，每个都要一路独立可控的电压。",
+ detail:"电极数量是离子阱扩展的头号工程瓶颈：H1 有 198 个电极就要 198 路信号；Helios 有 1228 个电极，靠'广播'技巧（多个电极共享一路信号，像三相电一样轮换）压到 273 路。这正是三代机器对比表里'信号/比特'不断下降的原因。"},
+"DC 反解": {match:["DC 反解","solve_dc_voltages"], title:"DC 反解（电压反求）",
+ plain:"正问题：给定电压算电场。反解是反过来：我指定'离子必须待在这一点且不受力'，让计算机反推每个电极该加多少伏。这是一个线性方程组求解问题，claw 用最小二乘法瞬间完成。",
+ detail:"量子计算时的'搬离子'就是把目标点沿走廊移动一小步、反解一次、再移一步……连成一串电压序列（波形）。本演示 H1 案例的反解残差是 3.5×10⁻¹¹ V/m——目标点的残余电场几乎为零，电压范围 ±1 V 也完全在商用 DAC 的舒适区内。"},
+"BEM": {match:["BEM","边界元"], title:"BEM（边界元法）",
+ plain:"计算电场的一种数值方法。思路：把每块电极表面切成许多小方块（'面板'），假设每块带一些电荷，然后解一个巨大的方程组，让每块电极上的电压恰好等于我们设定的值。解完就知道空间任意点的电场。",
+ detail:"claw 用的是'第一类边界元 + 点配点法'。面板越细越准，但内存是面板数的平方、求解时间是立方——1 万面板约 1 GB 内存几秒钟，4 万面板就要 13 GB。这就是为什么'整片芯片一次算'不现实，必须一个单元一个单元地算。",
+ refs:[["Wesenberg, 表面阱静电学, Phys. Rev. A 78, 063410 (2008)","https://arxiv.org/abs/0808.1623"]]},
+"面板": {match:["面板","收敛性"], title:"面板与收敛性检查",
+ plain:"面板就是 BEM 把电极表面切成的小方块。切得越细算得越准，但越慢。'收敛性检查'就是：先用粗面板算一遍，再加密一倍算一遍，如果结果几乎不变，说明粗面板已经够准，可以相信它。",
+ detail:"经验法则：面板边长不能大于电极之间的最小间隙，否则间隙两侧的电极'糊'在一起。本演示的 H2 案例里，粗面板曾经给出过一个看起来完全合理但其实是错的答案（假 null）——所以对重要结论做收敛性检查是铁律。"},
+"junction": {match:["junction","Junction"], title:"junction（离子走廊的交叉口）",
+ plain:"离子被囚禁在 RF null 这条'绳索'上只能沿线滑。一条直走廊里离子排成队、队首超不过队尾。要让离子拐弯换道，就得让两条走廊交叉——交叉口就是 junction。它是纯基础设施：上面不常住离子，只管'过车'。",
+ detail:"难处：产生走廊的 RF 电极是印在芯片平面上的铜线，铜线不能立体交叉，所以交叉口处的场必然被扰乱，赝势上会拱起一个'小山坡'（RF bump）。离子翻坡时容易被'颠热'。把 junction 的坡削低是 QCCD 路线最核心的工程问题之一，Quantinuum 花了多年才做到过 junction 几乎不加热。",
+ refs:[["Burton et al., 多物种离子过 junction 输运 (2023)","https://journals.aps.org/prx/abstract/10.1103/PhysRevX.14.041028"],["Helios 论文, arXiv:2511.05465","https://arxiv.org/abs/2511.05465"]]},
+"QCCD": {match:["QCCD"], title:"QCCD 架构（量子电荷耦合器件）",
+ plain:"Quantinuum 采用的架构思路：不把离子挤在一个大阱里，而是把芯片分成许多小工作区（zone），离子像工厂里的工件一样在各个工位之间搬来搬去——计算去'车间'，待命去'仓库'。1998 年由 Wineland 等人提出。",
+ detail:"为什么费这个劲？因为一个大阱里挤太多离子时，激光就没法只照其中一个而不碰邻居，而且众离子的振动模式挤在一起没法用。QCCD 用'搬运'换来了'每次只操作一两个孩子'的清净。代价：搬运本身慢且会加热，所以 zone 布局设计成了关键问题。",
+ refs:[["Wineland et al. (1998), QCCD 原始论文, arXiv:quant-ph/9710025","https://arxiv.org/abs/quant-ph/9710025"],["Pino et al. (2021), 首个 QCCD 整机演示, arXiv:2003.01293","https://arxiv.org/abs/2003.01293"]]},
+"zone": {match:["gate zone","zone"], title:"zone（工作区）",
+ plain:"芯片上划分出的功能区域：'gate zone'（做量子门操作的车间）、存储区（仓库）、装载区（进货口）等。离子在 zone 之间搬来搬去。zone 越多并行度越高，但每个 zone 都要独立的电极、激光和标定，工程复杂度爆炸。",
+ detail:"H1 只有几个 zone 一字排开；H2 有 8 个（4 个做操作、4 个做分拣）；Helios 有 8 个逻辑 zone 每批处理 16 个离子。zone 之间的间距（750 µm）是折中：太近激光串扰，太远芯片变大。"},
+"表面阱": {match:["表面阱","表面离子阱","表面电极"], title:"表面电极阱（surface trap）",
+ plain:"老式离子阱用三维悬空金属杆产生电场（像笼子）。表面阱把所有电极都印在一片平整芯片表面（像电路板），电场从平面向上拱起，离子悬在芯片上方几十微米。好处：可以用半导体光刻工艺制造，想印什么图案就印什么——这就是 claw 设计的对象。",
+ detail:"正因为电极全在一个平面上，claw 的 BEM 才能用'所有电极位于 z=0 平面'的简化假设。这个假设对 Quantinuum 全系列机器都成立。",
+ refs:[["Chiaverini et al., 表面电极架构原始论文 (2005), arXiv:quant-ph/0501147","https://arxiv.org/abs/quant-ph/0501147"]]},
+"微运动": {match:["微运动"], title:"微运动（micromotion）",
+ plain:"离子如果偏离了 RF null 线，就会被振荡电场推着小幅快速抖动，叫微运动。它会干扰激光操作、降低门的质量。理想情况离子严格待在 null 上、微运动为零——实际要靠 DC 电压仔细补偿。",
+ detail:"junction 交叉口的赝势山坡会让过路离子产生额外微运动，这是 junction 加热的主要来源之一。"},
+"协同冷却": {match:["协同冷却"], title:"协同冷却（sympathetic cooling）",
+ plain:"离子太热会让量子门出错，但用来计算的离子不能随便用激光照（会破坏量子信息）。办法：掺一种'冷却剂'离子（比如 Ba⁺）混在队伍里，激光只照它，它通过库仑碰撞把热量从计算离子身上带走。",
+ detail:"H2 用 ¹⁷¹Yb⁺ 做计算、¹³⁸Ba⁺ 做冷却剂；Helios 改成 ¹³⁷Ba⁺ 做计算（可见光激光更便宜稳定），冷却剂另选。claw 里换离子种类只需改一个质量参数。"},
+"H1": {match:["H1"], title:"Quantinuum H1（第一代）",
+ plain:"2021 年发布的第一代 QCCD 整机：一条直线走廊，几个工作区一字排开，离子数从 4 个逐步升到 20 个。换顺序靠'两个离子原地掉头'。直线拓扑的搬运时间随离子数增长太快，20 个就到顶了。",
+ refs:[["Pino et al., Nature 592, 209 (2021), arXiv:2003.01293","https://arxiv.org/abs/2003.01293"]]},
+"H2": {match:["H2"], title:"Quantinuum H2（第二代）",
+ plain:"2023 年发布的跑道形整机：走廊弯成一个闭合圆环，离子整圈旋转像传送带，配合原地掉头实现任意配对——完全绕开了 junction。32 个比特起步，8 个工作区，离子高度 70 µm，RF 用 200 V @ 42 MHz。",
+ refs:[["Moses et al., Phys. Rev. X 13, 041052 (2023), arXiv:2305.03828","https://arxiv.org/abs/2305.03828"]]},
+"Helios": {match:["Helios"], title:"Quantinuum Helios（第三代）",
+ plain:"2025 年发布：98 个 ¹³⁷Ba⁺ 比特。架构 = 一个可旋转的存储环 + 两条腿（缓存区 + 计算区），环和腿之间用一个 X junction 连接——这是 Quantinuum 第一次在整机里用 junction。1228 个电极只需 273 路信号。",
+ refs:[["Ransford et al., arXiv:2511.05465","https://arxiv.org/abs/2511.05465"],["Nature 正式版 (2026)","https://www.nature.com/articles/s41586-026-10676-4"]]},
+"GDS": {match:["GDS"], title:"GDS（版图文件格式）",
+ plain:"芯片制造业的标准文件格式，相当于'芯片的施工图纸'：里面记录了每一层金属上每个图形的精确多边形坐标。claw 设计的最终产出就是 GDS 文件，交给晶圆厂就能照图光刻。"},
+"DRC": {match:["DRC"], title:"DRC（设计规则检查）",
+ plain:"Design Rule Check：晶圆厂规定的制造工艺红线，比如'两条金属线间距不得小于 3 微米'——再近就刻不出来、会短路。claw 目前只查最简单的间距规则；真实流片要过晶圆厂几百条规则的完整检查。"},
+"扇出": {match:["扇出","bonding pad","扇出布线"], title:"扇出与焊盘（fanout / bonding pad）",
+ plain:"芯片中央的工作区电极又小又密，没法直接接线。扇出就是把每根电极用逐渐变宽的走线引到芯片边缘的大方块（焊盘）上，封装时用细金丝把焊盘和外部电路连起来。"},
+"execute_script": {match:["execute_script","逃生舱"], title:"execute_script（预设功能之外的通用出口）",
+ plain:"claw 的工具箱只有十几个固定工具，但这个工具允许 AI 直接写一段 Python 代码来操作版图——预设功能不够用时现场写代码解决。本演示的 H2 跑道就是这么造出来的。",
+ detail:"这是把'固定工具'升级成'通用能力'的关键设计：AI 遇到没见过的需求（新拓扑、特殊分析）不会被卡死。代价是每次都要现场造轮子，所以高频需求值得固化成正式工具——比如这次的中央条修复和跑道 builder。"},
+"离子高度": {match:["离子高度"], title:"离子高度（ion height）",
+ plain:"离子悬在芯片上方的距离，通常 30–100 微米（头发丝直径约 70 微米）。它由电极的宽度和间距决定：电极越宽，绳子悬得越高。高度是设计的第一参数：太低，芯片表面的脏电场会加热离子；太高，束缚变弱、激光难聚焦。",
+ detail:"H2 的离子高度是 70 µm。claw 迭代设计的典型循环就是：调电极宽度 → 算 null 高度 → 不对就再调，直到命中目标。"},
+"版图怎么看": {match:["版图"], title:"版图上的色块是什么",
+ plain:"版图就是芯片的'施工图纸'，上面每个色块是一块印在芯片表面的金属电极。颜色代表它的功能：蓝色 = DC 控制电极（加恒定电压，决定离子停哪）；红色 = RF 射频电极（加振荡电压，造出囚禁离子的'无形绳索'）；灰色 = 接地电极（0 伏，负责把 RF 电场'勒'出零点）；绿色 = 扇出走线（把电极连到芯片边缘的接线焊盘）。",
+ detail:"离子悬在这些色块上方几十微米的半空中——图纸上是看不见的。图纸设计的全部目标，就是让这些色块产生的电场在芯片上方拼出一条又稳又平的'绳索'（RF null）。色块之间的缝隙（白色间隙）也必须精确，太近了工厂刻不出来。"},
+"接地": {match:["接地","ground"], title:"接地电极（ground，0 伏）",
+ plain:"接地的金属块，电压恒为零。它的作用是当'参照物'：RF 电场从红色电极出发、终结在灰色接地电极上，中间才能挤出一个场强为零的位置（RF null）。five_wire 的中央条、junction 臂上的中央条都是接地电极——Helios 案例的缺陷就是因为 junction 臂上漏了它。"},
+"chart_ez": {match:[], title:"怎么看 |E|(z) 这张图",
+ plain:"横轴是离芯片表面的高度 z（微米），纵轴是 RF 电场的强度（对数刻度——每格差 10 倍）。曲线上那个又深又尖的 V 形谷就是 RF null：场强在某一高度暴跌几个量级，几乎为零。谷底的横坐标就是离子高度。没有这条深谷，这个几何就困不住离子。",
+ detail:"读图三步：① 找谷底位置（离子高度是否符合目标）；② 看谷有多深（越深说明几何越对称理想）；③ 看谷两侧斜率（越陡，束缚越强、囚禁频率越高）。"},
+"chart_loop": {match:[], title:"怎么看跑道环赝势图",
+ plain:"横轴是沿着跑道环走一圈的弧长（从某点出发绕一圈回来），纵轴是赝势（对数刻度）。如果环是完美的，这条线应该从头平到尾——离子绕圈时不感到任何起伏。图中间两个鼓包对应两个 180° 弯道：弯道处内外侧电极弧长不等，横截面不对称，赝势升高。",
+ detail:"红色虚线是未优化几何，绿色实线是优化后。优化分两轮：先用手工设计的两个参数（弯道半径偏移、内外环宽度补偿）把鼓包从 24 压到 6 meV；再放开弯道上全部 7 条电极边界做自动寻优，最终弯道与直道的 null 高度差压到 0.02 µm 以内。绿色线上残余的小峰位于直道与弯道的接缝处——那里剖面是突变的，再优化需要让剖面沿弧长渐变。"},
+"chart_ba": {match:[], title:"怎么看修复前后对比图",
+ plain:"绿色实线 = 修复后（臂上加了接地中央条）：z ≈ 20 µm 处场强暴跌成深谷——RF null 出现，离子能困住了。红色虚线 = 修复前：场强从头到尾平滑下降、没有任何谷——这个几何根本困不住离子。",
+ detail:"物理原因：两根 RF 轨道之间如果是空的，它们就像一根合并的宽导线，电场只会向外衰减；中间放一根接地电极后，左右两边的场才能在中线上相互抵消出零点。这个'缺一根电极就全盘皆输'的缺陷，人眼看版图很难发现，但 BEM 一算就现形——这就是'生成 → 验证'闭环的价值。"},
+};
+
+/* 填充所有版图图例 */
+document.querySelectorAll('.legend').forEach(el=>{
+  el.innerHTML =
+    '<span class="lt"><span class="term" data-term="版图怎么看">📖 图例</span>:</span>' +
+    '<span><span class="sw" style="background:#4C9AFF"></span><span class="term" data-term="DC">DC 控制电极</span></span>' +
+    '<span><span class="sw" style="background:#FF6B6B"></span><span class="term" data-term="RF">RF 射频电极</span></span>' +
+    '<span><span class="sw" style="background:#8E9AAF"></span><span class="term" data-term="接地">接地电极</span></span>' +
+    '<span><span class="sw" style="background:#57D9A3"></span><span class="term" data-term="扇出">扇出走线</span></span>';
+});
+
+/* 自动把幻灯片正文里的术语变成可点击链接 */
+(function(){
+  const entries = Object.entries(GLOSSARY).filter(([k,v])=>v.match.length);
+  const patterns = [];
+  entries.forEach(([key,g])=>g.match.forEach(m=>patterns.push({key,m})));
+  patterns.sort((a,b)=>b.m.length-a.m.length);
+  const esc = s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const ascii = /^[A-Za-z0-9]/;
+  const re = new RegExp(patterns.map(p=>{
+    const m = esc(p.m);
+    return ascii.test(p.m) ? `(?<![A-Za-z0-9])${p.m}(?![A-Za-z0-9])` : m;
+  }).join('|'), 'g');
+  const skip = new Set(['SCRIPT','STYLE','PRE','CODE','A','BUTTON']);
+  const capPerSlide = 4;
+  document.querySelectorAll('.slide').forEach(slide=>{
+    const counts = {};
+    const walker = document.createTreeWalker(slide, NodeFilter.SHOW_TEXT, {
+      acceptNode(n){
+        if(!n.nodeValue || !re.test(n.nodeValue)) return NodeFilter.FILTER_REJECT;
+        re.lastIndex = 0;
+        let p = n.parentElement;
+        while(p){ if(skip.has(p.tagName)||(p.classList&&p.classList.contains('term'))) return NodeFilter.FILTER_REJECT; p=p.parentElement; }
+        return NodeFilter.FILTER_ACCEPT;
+      }});
+    const nodes=[]; while(walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(node=>{
+      const text = node.nodeValue; re.lastIndex=0;
+      let m, last=0; const frag=document.createDocumentFragment(); let changed=false;
+      while((m=re.exec(text))){
+        const hit = patterns.find(p=>m[0]===p.m || m[0].includes(p.m));
+        const key = hit ? hit.key : null;
+        if(!key) continue;
+        if((counts[key]||0) >= capPerSlide) continue;
+        counts[key]=(counts[key]||0)+1;
+        frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+        const span=document.createElement('span');
+        span.className='term'; span.dataset.term=key; span.textContent=m[0];
+        frag.appendChild(span);
+        last = m.index + m[0].length; changed=true;
+      }
+      if(changed){ frag.appendChild(document.createTextNode(text.slice(last))); node.parentNode.replaceChild(frag, node); }
+    });
+  });
+})();
+
+/* 抽屉逻辑 */
+const drawer = document.getElementById('drawer');
+const drawerBody = document.getElementById('drawerBody');
+function openTerm(key){
+  const g = GLOSSARY[key]; if(!g) return;
+  drawerBody.innerHTML = `<h3>${g.title}</h3><p class="plain">${g.plain}</p>` +
+    (g.detail?`<p class="detail">${g.detail}</p>`:'') +
+    (g.refs?`<div class="refs"><b style="font-size:.9em;color:var(--muted)">深入学习：</b>` +
+      g.refs.map(r=>`<a href="${r[1]}" target="_blank" rel="noopener">↗ ${r[0]}</a>`).join('') + `</div>`:'');
+  drawer.classList.add('open');
+}
+document.addEventListener('click', e=>{
+  const t = e.target.closest('.term');
+  if(t){ e.stopPropagation(); openTerm(t.dataset.term); return; }
+  if(!e.target.closest('#drawer')) drawer.classList.remove('open');
+});
+document.getElementById('drawerClose').onclick = ()=>drawer.classList.remove('open');
+
+show(0);
+</script>
+</body>
+</html>

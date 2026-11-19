@@ -1,0 +1,22 @@
+{
+  "best_params": {
+    "d0": 4.4986,
+    "d1": 2.0094,
+    "d2": -0.0049,
+    "d3": 2.8121,
+    "d4": 3.7861,
+    "d5": -0.1606,
+    "d6": 9.6953
+  },
+  "best_metrics": {
+    "obj0_z_spread": 0.0065,
+    "obj0_max_dxy": 0.0196,
+    "obj1_bump_mev": 1.0155
+  },
+  "best_cost": 1.0580402733675063,
+  "n_evals": 251,
+  "wall_s": 671.7,
+  "success": false,
+  "message": "Maximum number of function evaluations has been exceeded."
+}
+n_evals: 251 wall: 672

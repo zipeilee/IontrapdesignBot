@@ -1,0 +1,43 @@
+[project]
+name = "iontrapclaw"
+version = "0.1.0"
+description = "IontrapdesignBot: AI-agent-driven ion-trap layout design over MCP, with parameterized electrodes, BEM analysis, optimization, and GDS output."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+keywords = ["ion-trap", "quantum-computing", "mcp", "gds", "boundary-element-method"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "gdstk>=0.9",
+    "mcp>=1.0,<2",
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "matplotlib>=3.7",
+    "shapely>=2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+iontrapclaw = "iontrap_mcp.server:main"
+
+[project.urls]
+Homepage = "https://github.com/zipeilee/IontrapdesignBot"
+Repository = "https://github.com/zipeilee/IontrapdesignBot"
+Issues = "https://github.com/zipeilee/IontrapdesignBot/issues"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["iontrap_mcp*"]

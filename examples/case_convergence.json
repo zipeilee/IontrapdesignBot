@@ -1,0 +1,62 @@
+{
+ "racetrack": [
+  {
+   "panel": 12,
+   "n_panels": 2842,
+   "null_z": 30.75,
+   "null_y": 77.19,
+   "wall_s": 0.4
+  },
+  {
+   "panel": 8,
+   "n_panels": 5809,
+   "null_z": 30.68,
+   "null_y": 77.33,
+   "wall_s": 3.1
+  },
+  {
+   "panel": 6,
+   "n_panels": 10378,
+   "null_z": 30.6,
+   "null_y": 77.34,
+   "wall_s": 1935.4
+  },
+  {
+   "panel": 4,
+   "n_panels": 21476,
+   "null_z": 30.42,
+   "null_y": 77.51,
+   "wall_s": 7343.8
+  }
+ ],
+ "junction": [
+  {
+   "panel": 12,
+   "n_panels": 2325,
+   "null_z": 20.88,
+   "null_y": -0.0,
+   "wall_s": 0.3
+  },
+  {
+   "panel": 8,
+   "n_panels": 4496,
+   "null_z": 20.8,
+   "null_y": 0.0,
+   "wall_s": 0.9
+  },
+  {
+   "panel": 6,
+   "n_panels": 7905,
+   "null_z": 20.79,
+   "null_y": -0.0,
+   "wall_s": 3.5
+  },
+  {
+   "panel": 4,
+   "n_panels": 16341,
+   "null_z": 20.74,
+   "null_y": -0.0,
+   "wall_s": 25.4
+  }
+ ]
+}
